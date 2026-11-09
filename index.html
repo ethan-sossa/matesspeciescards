@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MATES SPECIES CARDS 2026</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+
+
+
+    <style>
+        :root {
+          color-scheme: light;
+          --page-bg: #f2f2f2;
+          --card-bg: #ffffff;
+          --text: #222222;
+          --muted: #666666;
+          --divider: #dddddd;
+          --button-bg: #333333;
+          --button-hover: #555555;
+          --bordercolor: #000000;
+        }
+
+        body.dark-mode {
+          color-scheme: dark;
+          --page-bg: #17191c;
+          --card-bg: #24282d;
+          --text: #f1f3f5;
+          --muted: #aeb6bf;
+          --divider: #41474f;
+          --button-bg: #454c55;
+          --button-hover: #5a626d;
+          --bordercolor: #ffffff;
+        }
+        
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            color: var(--text);
+            background: var(--page-bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 15px 15px 0px 15px;
+        }
+
+        .container {
+            background: var(--card-bg);
+            color: var(--text);
+            padding: 30px;
+            border-radius: 12px;
+            width: 600px;
+            max-width: 100%;
+            text-align: center;
+            box-shadow: 0 4px 15px #0002;
+        }
+
+        h1 { margin-top: 0; }
+
+        #animalImage {
+          max-width: 100%;
+          max-height: 400px;
+          object-fit: contain;
+          border-radius: 18px;
+          border: 2px solid var(--bordercolor);
+          overflow: hidden;
+          display: block;
+        }
+
+        .answer {
+            min-height: 27px;
+            font-size: 20px;
+            margin: 12px 0 5px;
+            overflow-wrap: anywhere;
+        }
+
+        .answer.scientific { font-style: italic; }
+
+        button {
+            padding: 11px 17px;
+            margin: 5px;
+            border: none;
+            border-radius: 6px;
+            background: var(--button-bg);
+            color: white;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 15px;
+        }
+
+        button:hover {
+            background: var(--button-hover);
+        }
+
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .reveal { background: #287a45; }
+        .reveal:hover { background: #1d6035; }
+
+        .secondary { background: #65717d; }
+        .secondary:hover { background: #4f5963; }
+
+        .navigation {
+            margin-top: 22px;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        #progress {
+            margin: 25px 0 0;
+            padding-top: 10px;
+            padding-bottom: -5px;
+            border-top: 1px solid var(--divider);
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        #status {
+            color: #b3261e;
+            font-size: 14px;
+        }
+        
+        .header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          width: 100%;
+        }
+        
+        .header h1 {
+          margin: 0;
+          position: relative;
+          top: -1px;
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+    <div class="header">
+    <h1>SPECIES CARDS</h1>
+      <button
+          class="secondary"
+          id="themeButton"
+          onclick="toggleDarkMode()">
+          DARK MODE
+      </button>
+    </div>
+
+    <p id="status">Loading species...</p>
+
+    <img id="animalImage" alt="Species image" hidden>
+
+    <div class="answer" id="commonName"></div>
+    <button class="reveal" id="commonButton" onclick="toggleCommon()" disabled>
+        SHOW COMMON NAME
+    </button>
+
+    <div class="answer scientific" id="scientificName"></div>
+    <button class="reveal" id="scientificButton" onclick="toggleScientific()" disabled>
+        SHOW SCIENTIFIC NAME
+    </button>
+
+    <div class="navigation">
+        <button id="previousButton" onclick="previousAnimal()" disabled>PREVIOUS</button>
+        <button id="nextButton" onclick="nextAnimal()" disabled>NEXT</button>
+        <button class="secondary" id="shuffleButton" onclick="shuffleAnimals()" disabled>
+            SHUFFLE ALL
+        </button>
+    </div>
+
+    <p id="progress">CARD 0/0</p>
+    <p style="padding-top: 0; padding-bottom: 0; color: var(--muted); margin: 10px 0 0;">made by ethan sossa.</p>
+</div>
+
+<script>
+    let animals = [];
+    let currentIndex = 0;
+
+    const imageElement = document.getElementById("animalImage");
+    const commonElement = document.getElementById("commonName");
+    const scientificElement = document.getElementById("scientificName");
+    const commonButton = document.getElementById("commonButton");
+    const scientificButton = document.getElementById("scientificButton");
+    const previousButton = document.getElementById("previousButton");
+    const nextButton = document.getElementById("nextButton");
+    const shuffleButton = document.getElementById("shuffleButton");
+    const progressElement = document.getElementById("progress");
+    const statusElement = document.getElementById("status");
+
+    async function loadSpecies() {
+        try {
+            const response = await fetch("./species.json");
+
+            if (!response.ok) {
+                throw new Error(`Could not load species.json (HTTP ${response.status}).`);
+            }
+
+            const data = await response.json();
+
+            if (!Array.isArray(data) || data.length === 0 ||
+                !data.every(animal =>
+                    animal &&
+                    typeof animal.image === "string" &&
+                    typeof animal.commonName === "string" &&
+                    typeof animal.scientificName === "string"
+                )) {
+                throw new Error("   bad file :(((((((( tell me if you see this cuz its prob my fault");
+            }
+
+            animals = data;
+            currentIndex = 0;
+
+            statusElement.textContent = "";
+            setControlsEnabled(true);
+            displayAnimal();
+
+        } catch (error) {
+            statusElement.textContent =
+                error.message + "   bro how tf do you get this error 😭😭😭";
+        }
+    }
+
+    function setControlsEnabled(enabled) {
+        commonButton.disabled = !enabled;
+        scientificButton.disabled = !enabled;
+        previousButton.disabled = !enabled;
+        nextButton.disabled = !enabled;
+        shuffleButton.disabled = !enabled;
+    }
+
+    function displayAnimal() {
+        if (animals.length === 0) return;
+
+        const animal = animals[currentIndex];
+        imageElement.src = animal.image;
+        imageElement.hidden = false;
+
+        imageElement.onerror = function() {
+            statusElement.textContent = "no image yet hahaha! "   + animal.image;
+        };
+
+        imageElement.onload = function() {
+            statusElement.textContent = "";
+        };
+        commonElement.textContent = "";
+        scientificElement.textContent = "";
+        commonButton.textContent = "SHOW COMMON NAME";
+        scientificButton.textContent = "SHOW SCIENTIFIC NAME";
+
+        progressElement.textContent = `CARD ${currentIndex + 1}/${animals.length}`;
+
+        previousButton.disabled = currentIndex === 0;
+        nextButton.disabled = currentIndex === animals.length - 1;
+    }
+
+    function toggleCommon() {
+        if (animals.length === 0) return;
+
+        const isVisible = commonElement.textContent !== "";
+
+        commonElement.textContent = isVisible
+            ? ""
+            : animals[currentIndex].commonName;
+
+        commonButton.textContent = isVisible
+            ? "SHOW COMMON NAME"
+            : "HIDE COMMON NAME";
+    }
+
+    function toggleScientific() {
+        if (animals.length === 0) return;
+
+        const isVisible = scientificElement.textContent !== "";
+
+        scientificElement.textContent = isVisible
+            ? ""
+            : animals[currentIndex].scientificName;
+
+        scientificButton.textContent = isVisible
+            ? "SHOW SCIENTIFIC NAME"
+            : "HIDE SCIENTIFIC NAME";
+    }
+
+    function nextAnimal() {
+        if (currentIndex < animals.length - 1) {
+            currentIndex++;
+            displayAnimal();
+        }
+    }
+
+    function previousAnimal() {
+        if (currentIndex > 0) {
+            currentIndex--;
+            displayAnimal();
+        }
+    }
+
+    // Shuffle
+    function shuffleAnimals() {
+        if (animals.length < 2) return;
+
+        for (let i = animals.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [animals[i], animals[j]] = [animals[j], animals[i]];
+        }
+
+        currentIndex = 0;
+        displayAnimal();
+    }
+
+    function toggleDarkMode() {
+      const isDark = document.body.classList.toggle("dark-mode");
+
+      document.getElementById("themeButton").textContent =
+          isDark ? "LIGHT MODE" : "DARK MODE";
+    }
+
+    loadSpecies();
+</script>
+</body>
+</html>
