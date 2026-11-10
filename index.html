@@ -139,6 +139,37 @@
           position: relative;
           top: -1px;
         }
+
+        .memorization-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .memorization-row label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .memorization-row input {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: #287a45;
+        }
+
+        .save-controls {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 10px;
+            gap: 5px;
+        }
     </style>
 </head>
 
@@ -159,20 +190,48 @@
     <img id="animalImage" alt="Species image" hidden>
 
     <div class="answer" id="commonName"></div>
-    <button class="reveal" id="commonButton" onclick="toggleCommon()" disabled>
-        SHOW COMMON NAME
-    </button>
+    <div class="memorization-row">
+        <button class="reveal" id="commonButton" onclick="toggleCommon()" disabled>
+            SHOW COMMON NAME
+        </button>
+        <label>
+            <input type="checkbox" id="commonMemorized" onchange="updateMemorization()">
+            Memorized?
+        </label>
+    </div>
 
-    <div class="answer scientific" id="scientificName"></div>
+<div class="answer scientific" id="scientificName"></div>
+<div class="memorization-row">
     <button class="reveal" id="scientificButton" onclick="toggleScientific()" disabled>
         SHOW SCIENTIFIC NAME
     </button>
+    <label>
+        <input type="checkbox" id="scientificMemorized" onchange="updateMemorization()">
+        Memorized?
+    </label>
+</div>
 
     <div class="navigation">
         <button id="previousButton" onclick="previousAnimal()" disabled>PREVIOUS</button>
         <button id="nextButton" onclick="nextAnimal()" disabled>NEXT</button>
         <button class="secondary" id="shuffleButton" onclick="shuffleAnimals()" disabled>
             SHUFFLE ALL
+        </button>
+        <button class="secondary"
+                id="shuffleUnmemorizedButton"
+                onclick="shuffleUnmemorized()"
+                disabled>
+            SHUFFLE UNMEMORIZED
+        </button>
+    </div>
+
+    <div class="save-controls">
+        <button class="secondary" onclick="exportSave()">
+            EXPORT SAVE
+        </button>
+
+        <button class="secondary" onclick="importSave()">
+            IMPORT SAVE
         </button>
     </div>
 
@@ -181,8 +240,10 @@
 </div>
 
 <script>
-    let animals = [];
+    let Allanimals = [];
+    let animals =[];
     let currentIndex = 0;
+    let memorization = JSON.parse(localStorage.getItem("speciesProgress") || "{}");
 
     const imageElement = document.getElementById("animalImage");
     const commonElement = document.getElementById("commonName");
@@ -194,6 +255,11 @@
     const shuffleButton = document.getElementById("shuffleButton");
     const progressElement = document.getElementById("progress");
     const statusElement = document.getElementById("status");
+    const commonMemorized = document.getElementById("commonMemorized");
+    const scientificMemorized = document.getElementById("scientificMemorized");
+    const shuffleUnmemorizedButton =
+        document.getElementById("shuffleUnmemorizedButton");
+        
 
     async function loadSpecies() {
         try {
@@ -215,8 +281,9 @@
                 throw new Error("   bad file :(((((((( tell me if you see this cuz its prob my fault");
             }
 
-            animals = data;
-            currentIndex = 0;
+        allAnimals = data;
+        animals = [...allAnimals];
+        currentIndex = 0;
 
             statusElement.textContent = "";
             setControlsEnabled(true);
@@ -234,6 +301,9 @@
         previousButton.disabled = !enabled;
         nextButton.disabled = !enabled;
         shuffleButton.disabled = !enabled;
+        commonMemorized.disabled = !enabled;
+        scientificMemorized.disabled = !enabled;
+        shuffleUnmemorizedButton.disabled = !enabled;
     }
 
     function displayAnimal() {
@@ -255,7 +325,15 @@
         commonButton.textContent = "SHOW COMMON NAME";
         scientificButton.textContent = "SHOW SCIENTIFIC NAME";
 
-        progressElement.textContent = `CARD ${currentIndex + 1}/${animals.length}`;
+        const savedProgress = memorization[animal.scientificName] || {
+            common: false,
+            scientific: false
+        };
+
+        commonMemorized.checked = savedProgress.common;
+        scientificMemorized.checked = savedProgress.scientific;
+
+        updateProgress();
 
         previousButton.disabled = currentIndex === 0;
         nextButton.disabled = currentIndex === animals.length - 1;
@@ -304,13 +382,36 @@
     }
 
     // Shuffle
-    function shuffleAnimals() {
-        if (animals.length < 2) return;
-
-        for (let i = animals.length - 1; i > 0; i--) {
+    function shuffleList(list) {
+        for (let i = list.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
-            [animals[i], animals[j]] = [animals[j], animals[i]];
+            [list[i], list[j]] = [list[j], list[i]];
         }
+    }
+
+    function shuffleAnimals() {
+        animals = [...allAnimals];
+
+        shuffleList(animals);
+
+        currentIndex = 0;
+        displayAnimal();
+    }
+
+    function shuffleUnmemorized() {
+        animals = allAnimals.filter(animal => {
+            const progress = memorization[animal.scientificName];
+
+            return !progress?.common || !progress?.scientific;
+        });
+
+        if (animals.length === 0) {
+            animals = [...allAnimals];
+            alert("Congratulations! You've memorized every species!");
+            return;
+        }
+
+        shuffleList(animals);
 
         currentIndex = 0;
         displayAnimal();
@@ -321,6 +422,103 @@
 
       document.getElementById("themeButton").textContent =
           isDark ? "LIGHT MODE" : "DARK MODE";
+    }
+
+    function updateMemorization() {
+        const animal = animals[currentIndex];
+        const key = animal.scientificName;
+
+        memorization[key] = {
+            common: commonMemorized.checked,
+            scientific: scientificMemorized.checked
+        };
+
+        localStorage.setItem("speciesProgress", JSON.stringify(memorization));
+
+        updateProgress();
+    }
+
+    function updateProgress() {
+        let memorizedCount = 0;
+
+        allAnimals.forEach(animal => {
+            const progress = memorization[animal.scientificName];
+
+            if (progress?.common) memorizedCount++;
+            if (progress?.scientific) memorizedCount++;
+        });
+
+        const total = allAnimals.length * 2;
+        const percentage = Math.round((memorizedCount / total) * 100);
+
+        progressElement.textContent =
+            `CARD ${currentIndex + 1}/${animals.length} | ${percentage}% MEMORIZED`;
+    }
+
+    function exportSave() {
+        const saveData = {
+            version: 1,
+            progress: memorization
+        };
+
+        const json = JSON.stringify(saveData);
+
+        const bytes = new TextEncoder().encode(json);
+        const binary = Array.from(bytes, byte => String.fromCharCode(byte)).join("");
+
+        const saveCode = btoa(binary);
+
+        navigator.clipboard.writeText(saveCode)
+            .then(() => {
+                alert("Save code copied to clipboard!");
+            })
+            .catch(() => {
+                prompt("Copy your save code:", saveCode);
+            });
+    }
+
+    function importSave() {
+        const saveCode = prompt("Paste your save code:");
+
+        if (!saveCode) return;
+
+        try {
+            const binary = atob(saveCode.trim());
+
+            const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+            const json = new TextDecoder().decode(bytes);
+
+            const saveData = JSON.parse(json);
+
+            if (
+                saveData.version !== 1 ||
+                !saveData.progress ||
+                typeof saveData.progress !== "object" ||
+                Array.isArray(saveData.progress)
+            ) {
+                throw new Error("Invalid save format.");
+            }
+
+            const confirmed = confirm(
+                "Importing this save will replace your current memorization progress. Continue?"
+            );
+
+            if (!confirmed) return;
+
+            memorization = saveData.progress;
+
+            localStorage.setItem(
+                "speciesProgress",
+                JSON.stringify(memorization)
+            );
+
+            displayAnimal();
+
+            alert("Save imported successfully!");
+
+        } catch (error) {
+            alert("Invalid save code. Please check that you copied it correctly.");
+        }
     }
 
     loadSpecies();
