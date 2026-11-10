@@ -256,7 +256,7 @@
 </div>
 
 <script>
-    let Allanimals = [];
+    let allanimals = [];
     let animals =[];
     let currentIndex = 0;
     let memorization = JSON.parse(localStorage.getItem("speciesProgress") || "{}");
@@ -399,7 +399,6 @@
         }
     }
 
-    // Shuffle
     function shuffleList(list) {
         for (let i = list.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
@@ -473,10 +472,8 @@
             `CARD ${currentIndex + 1}/${animals.length} | ${percentage}% MEMORIZED`;
     }
 
-
     const SAVE_VERSION = 2;
 
-    // Convert bytes to a compact, copyable Base64URL string.
     function encodeSave(bytes) {
         let binary = "";
 
@@ -490,7 +487,6 @@
             .replace(/=+$/, "");
     }
 
-    // Convert a save code back into bytes.
     function decodeSave(code) {
         const base64 = code
             .replace(/-/g, "+")
@@ -501,7 +497,6 @@
         return Uint8Array.from(binary, char => char.charCodeAt(0));
     }
 
-    // Simple checksum for detecting accidental changes.
     function calculateChecksum(bytes) {
         let checksum = 0;
 
@@ -565,8 +560,6 @@
     async function copySaveLink() {
         try {
             const url = new URL(window.location.href);
-
-        // Remove existing parameters, including old save codes.
             url.search = "";
             url.hash = "";
 
@@ -671,6 +664,8 @@
         window.history.replaceState({}, "", url.toString());
         importSave(saveCode);
     }
+
+    loadSpecies();
 </script>
 </body>
 </html>
