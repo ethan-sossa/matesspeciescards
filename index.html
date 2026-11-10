@@ -245,6 +245,10 @@
         <button class="clear-save" onclick="clearSave()">
             CLEAR SAVE
         </button>
+
+        <button class="secondary" onclick="copySaveLink()">
+            COPY SAVE LINK
+        </button>
     </div>
 
     <p id="progress">CARD 0/0</p>
@@ -300,6 +304,8 @@
             statusElement.textContent = "";
             setControlsEnabled(true);
             displayAnimal();
+
+            checkURLSave();
 
         } catch (error) {
             statusElement.textContent =
@@ -545,8 +551,8 @@
             .catch(() => prompt("Copy your save code:", saveCode));
     }
 
-    function importSave() {
-        const input = prompt("Paste your save code:");
+    function importSave(providedCode = null) {
+        const input = providedCode ?? prompt("Paste your save code:");
 
         if (input === null || !input.trim()) return;
 
@@ -625,6 +631,25 @@
         currentIndex = 0;
         displayAnimal();
         alert("All memorization progress has been cleared!");
+    }
+
+    function checkURLSave() {
+        const url = new URL(window.location.href);
+        const saveCode = url.searchParams.get("code");
+        if (!saveCode) return;
+        url.searchParams.delete("code");
+        window.history.replaceState({}, "", url.toString());
+        importSave(saveCode);
+    }
+
+    function copySaveLink() {
+        const url = new URL(window.location.href);
+
+        url.searchParams.set("code", generateSaveCode());
+
+        navigator.clipboard.writeText(url.toString())
+            .then(() => alert("Save link copied!"))
+            .catch(() => alert("Could not copy link."));
     }
 
     loadSpecies();
