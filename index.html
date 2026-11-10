@@ -512,11 +512,14 @@
         return checksum;
     }
 
-    function exportSave() {
-        // Always use the original species order.
+    
+    function generateSaveCode() {
         const count = allAnimals.length;
 
-        // Two bits per species, plus 4 metadata bytes.
+        if (count === 0) {
+            throw new Error("Species have not finished loading.");
+        }
+
         const progressBytes = Math.ceil(count * 2 / 8);
         const bytes = new Uint8Array(progressBytes + 4);
 
@@ -540,16 +543,43 @@
             }
         });
 
-        // Final byte stores the checksum.
         bytes[bytes.length - 1] =
             calculateChecksum(bytes.slice(0, -1));
 
-        const saveCode = "SC2-" + encodeSave(bytes);
-
-        navigator.clipboard.writeText(saveCode)
-            .then(() => alert("Save code copied to clipboard!"))
-            .catch(() => prompt("Copy your save code:", saveCode));
+        return "SC2-" + encodeSave(bytes);
     }
+
+    async function exportSave() {
+        try {
+            const saveCode = generateSaveCode();
+
+            await navigator.clipboard.writeText(saveCode);
+
+            alert("Save code copied to clipboard!");
+        } catch (error) {
+            alert("Could not copy automatically. Please copy manually.");
+            prompt("Copy your save code:", generateSaveCode());
+        }
+    }
+
+    async function copySaveLink() {
+        try {
+            const url = new URL(window.location.href);
+
+        // Remove existing parameters, including old save codes.
+            url.search = "";
+            url.hash = "";
+
+            url.searchParams.set("code", generateSaveCode());
+
+            await navigator.clipboard.writeText(url.toString());
+
+            alert("Save link copied to clipboard!");
+        } catch (error) {
+            alert("Could not copy the save link: " + error.message);
+        }
+    }
+
 
     function importSave(providedCode = null) {
         const input = providedCode ?? prompt("Paste your save code:");
@@ -641,18 +671,6 @@
         window.history.replaceState({}, "", url.toString());
         importSave(saveCode);
     }
-
-    function copySaveLink() {
-        const url = new URL(window.location.href);
-
-        url.searchParams.set("code", generateSaveCode());
-
-        navigator.clipboard.writeText(url.toString())
-            .then(() => alert("Save link copied!"))
-            .catch(() => alert("Could not copy link."));
-    }
-
-    loadSpecies();
 </script>
 </body>
 </html>
