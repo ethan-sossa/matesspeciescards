@@ -34,6 +34,7 @@
         }
         
         * { box-sizing: border-box; }
+        [hidden] { display: none !important; }
 
         body {
             font-family: Helvetica, Arial, sans-serif;
@@ -122,6 +123,30 @@
             font-size: 14px;
         }
 
+        .memory-bar {
+            display: flex;
+            height: 18px;
+            width: 100%;
+            overflow: hidden;
+            border-radius: 999px;
+            background: #9ca3af;
+            margin-top: 12px;
+        }
+        .memory-segment { height: 100%; transition: width 0.2s ease; }
+        #memoryNone { background: #9ca3af; }
+        #memoryPartial { background: #eab308; }
+        #memoryFull { background: #22a06b; }
+        .memory-legend {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px 15px;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+        .memory-legend span { display: inline-flex; align-items: center; gap: 5px; }
+        .memory-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
         #status {
             color: #b3261e;
             font-size: 14px;
@@ -178,6 +203,16 @@
         .clear-save:hover {
             background: #8c1d18;
         }
+        .test-panel { margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--divider); }
+        .test-panel input, .test-panel select { width: 100%; padding: 11px; margin: 6px 0 12px; border: 1px solid var(--divider); border-radius: 6px; background: var(--card-bg); color: var(--text); font: inherit; }
+        .test-panel label { display: block; text-align: left; font-size: 14px; }
+        .test-panel .question-counter { color: var(--muted); }
+        .test-panel .result-item { text-align: left; border-top: 1px solid var(--divider); padding: 12px 0; overflow-wrap: anywhere; }
+        .test-panel .result-item p { margin: 5px 0; }
+        .test-panel .correct { color: #23854b; }
+        .test-panel .incorrect { color: #c53b32; }
+        .test-panel .test-image { max-width: 100%; max-height: 360px; object-fit: contain; margin: 12px auto; display: block; border-radius: 12px; }
+        .test-panel .test-nav { display: flex; flex-wrap: wrap; justify-content: center; }
     </style>
 </head>
 
@@ -251,12 +286,59 @@
         </button>
     </div>
 
-    <p id="progress">CARD 0/0</p>
+    <div class="test-panel" id="testPanel">
+      <div id="testSetup">
+        <h2>TEST MODE</h2>
+        <label for="testCount">Number of species</label>
+        <input id="testCount" type="number" min="1" value="50">
+        <label for="testTolerance">Answer tolerance</label>
+        <select id="testTolerance">
+          <option value="0">Exact spelling (ignore spaces, case and punctuation)</option>
+          <option value="1" selected>Strict (1 typo per word)</option>
+          <option value="2">Lenient (up to 2 typos per word)</option>
+        </select>
+        <button id="startTestButton" onclick="startTest()" disabled>START TEST</button>
+      </div>
+      <div id="testActive" hidden>
+        <h2>TEST MODE</h2>
+        <p class="question-counter" id="testCounter"></p>
+        <img id="testImage" class="test-image" alt="Identify this species">
+        <label for="testCommon">Common name</label>
+        <input id="testCommon" type="text" autocomplete="off" spellcheck="false">
+        <label for="testScientific">Scientific name</label>
+        <input id="testScientific" type="text" autocomplete="off" spellcheck="false">
+        <div class="test-nav">
+          <button id="testPrev" onclick="testMove(-1)">PREVIOUS</button>
+          <button id="testNext" onclick="testMove(1)">NEXT</button>
+          <button class="clear-save" onclick="endTest()">END TEST NOW</button>
+        </div>
+      </div>
+      <div id="testResults" hidden>
+        <h2>TEST RESULTS</h2>
+        <div id="testSummary"></div>
+        <div id="testReview"></div>
+        <button onclick="resetTest()">RETURN TO FLASHCARDS</button>
+        <button onclick="resetTest(); startTest()">NEW TEST</button>
+      </div>
+    </div>
+    <div id="progress">
+        <div id="progressText">CARD 0/0 | 0% MEMORIZED</div>
+        <div class="memory-bar" role="img" aria-label="Memorization progress" id="memoryBar">
+            <div class="memory-segment" id="memoryNone" style="width:100%"></div>
+            <div class="memory-segment" id="memoryPartial" style="width:0%"></div>
+            <div class="memory-segment" id="memoryFull" style="width:0%"></div>
+        </div>
+        <div class="memory-legend">
+            <span><i class="memory-dot" style="background:#9ca3af"></i><span id="noneLabel">0 Unmemorized</span></span>
+            <span><i class="memory-dot" style="background:#eab308"></i><span id="partialLabel">0 Partial</span></span>
+            <span><i class="memory-dot" style="background:#22a06b"></i><span id="fullLabel">0 Complete</span></span>
+        </div>
+    </div>
     <p style="padding-top: 0; padding-bottom: 0; color: var(--muted); margin: 10px 0 0;">made by ethan sossa.</p>
 </div>
 
 <script>
-    let allanimals = [];
+    let allAnimals = [];
     let animals =[];
     let currentIndex = 0;
     let memorization = JSON.parse(localStorage.getItem("speciesProgress") || "{}");
@@ -303,6 +385,8 @@
 
             statusElement.textContent = "";
             setControlsEnabled(true);
+            document.getElementById("startTestButton").disabled = false;
+            document.getElementById("testCount").max = allAnimals.length;
             displayAnimal();
 
             checkURLSave();
@@ -456,20 +540,27 @@
     }
 
     function updateProgress() {
-        let memorizedCount = 0;
-
+        let none = 0, partial = 0, full = 0;
         allAnimals.forEach(animal => {
-            const progress = memorization[animal.scientificName];
-
-            if (progress?.common) memorizedCount++;
-            if (progress?.scientific) memorizedCount++;
+            const saved = memorization[animal.scientificName] || {};
+            const parts = Number(Boolean(saved.common)) + Number(Boolean(saved.scientific));
+            if (parts === 0) none++;
+            else if (parts === 1) partial++;
+            else full++;
         });
 
-        const total = allAnimals.length * 2;
-        const percentage = Math.round((memorizedCount / total) * 100);
-
-        progressElement.textContent =
+        const total = allAnimals.length;
+        const percentage = total ? Math.round((partial + 2 * full) / (2 * total) * 100) : 0;
+        document.getElementById("progressText").textContent =
             `CARD ${currentIndex + 1}/${animals.length} | ${percentage}% MEMORIZED`;
+        document.getElementById("memoryNone").style.width = `${total ? none / total * 100 : 100}%`;
+        document.getElementById("memoryPartial").style.width = `${total ? partial / total * 100 : 0}%`;
+        document.getElementById("memoryFull").style.width = `${total ? full / total * 100 : 0}%`;
+        document.getElementById("noneLabel").textContent = `${none} UNMEMORIZED`;
+        document.getElementById("partialLabel").textContent = `${partial} PARTIAL`;
+        document.getElementById("fullLabel").textContent = `${full} MEMORIZED`;
+        document.getElementById("memoryBar").setAttribute("aria-label",
+            `${none} unmemorized, ${partial} partially memorized, ${full} fully memorized`);
     }
 
     const SAVE_VERSION = 2;
@@ -663,6 +754,175 @@
         url.searchParams.delete("code");
         window.history.replaceState({}, "", url.toString());
         importSave(saveCode);
+    }
+
+    let testQuestions = [];
+    let testIndex = 0;
+    let testTolerance = 1;
+    const testAnswers = [];
+
+    function normalizeAnswer(value) {
+        return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase().replace(/[^a-z0-9]/g, "");
+    }
+
+    function editDistance(a, b) {
+        let previous = Array.from({length: b.length + 1}, (_, i) => i);
+        for (let i = 1; i <= a.length; i++) {
+            const current = [i];
+            for (let j = 1; j <= b.length; j++) {
+                current[j] = Math.min(previous[j] + 1, current[j-1] + 1,
+                    previous[j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+            }
+            previous = current;
+        }
+        return previous[b.length];
+    }
+
+    function matchesAnswer(guess, expected, scientific = false) {
+        if (!scientific && /\([^()]+\)/.test(expected)) {
+            const alternatives = [expected, expected.replace(/\([^()]*\)/g, " ").trim()];
+            for (const match of expected.matchAll(/\(([^()]*)\)/g)) {
+                alternatives.push(match[1].trim());
+            }
+            return alternatives.some(option => matchesCommonAlternative(guess, option));
+        }
+        return matchesCommonAlternative(guess, expected, scientific);
+    }
+
+    function matchesCommonAlternative(guess, expected, scientific = false) {
+        if (!guess.trim()) return false;
+        const a = normalizeAnswer(guess);
+        const b = normalizeAnswer(expected);
+        if (a === b) return true;
+        if (testTolerance === 0) return false;
+        if (scientific) {
+            const parts = expected.trim().split(/\s+/);
+            if (parts.length === 2) {
+                const genus = normalizeAnswer(parts[0]);
+                const species = normalizeAnswer(parts[1]);
+                const typed = guess.trim().split(/\s+/).map(normalizeAnswer);
+                if (typed.length === 2) {
+                    return typed.every((part, i) => {
+                        const target = i === 0 ? genus : species;
+                        return part.length >= 3 && editDistance(part, target) <= testTolerance;
+                    });
+                }
+            }
+        }
+        return a.length >= 5 && b.length >= 5 && editDistance(a, b) <= testTolerance;
+    }
+
+    function startTest() {
+        if (!allAnimals.length) return;
+        const countInput = document.getElementById("testCount");
+        const count = Number(countInput.value);
+        if (!Number.isInteger(count) || count < 1 || count > allAnimals.length) {
+            alert(`Choose between 1 and ${allAnimals.length} species.`);
+            return;
+        }
+        testTolerance = Number(document.getElementById("testTolerance").value);
+        const pool = [...allAnimals];
+        shuffleList(pool);
+        testQuestions = pool.slice(0, count);
+        testAnswers.length = 0;
+        testQuestions.forEach(() => testAnswers.push({common: "", scientific: ""}));
+        testIndex = 0;
+        document.getElementById("testSetup").hidden = true;
+        document.getElementById("testResults").hidden = true;
+        document.getElementById("testActive").hidden = false;
+        setFlashcardsVisible(false);
+        showTestQuestion();
+    }
+
+    function setFlashcardsVisible(visible) {
+        for (const id of ["animalImage", "commonName", "scientificName", "progress"]) {
+            document.getElementById(id).hidden = !visible;
+        }
+        for (const selector of [".memorization-row", ".navigation", ".save-controls"]) {
+            document.querySelector(selector).hidden = !visible;
+            if (selector === ".memorization-row")
+                document.querySelectorAll(selector).forEach(el => el.hidden = !visible);
+        }
+    }
+
+    function saveTestAnswer() {
+        if (!testQuestions.length) return;
+        testAnswers[testIndex] = {
+            common: document.getElementById("testCommon").value,
+            scientific: document.getElementById("testScientific").value
+        };
+    }
+
+    function showTestQuestion() {
+        const animal = testQuestions[testIndex];
+        document.getElementById("testCounter").textContent = `QUESTION ${testIndex+1}/${testQuestions.length}`;
+        document.getElementById("testImage").src = animal.image;
+        document.getElementById("testCommon").value = testAnswers[testIndex].common;
+        document.getElementById("testScientific").value = testAnswers[testIndex].scientific;
+        document.getElementById("testPrev").disabled = testIndex === 0;
+        document.getElementById("testNext").disabled = testIndex === testQuestions.length - 1;
+    }
+
+    function testMove(step) {
+        saveTestAnswer();
+        const next = testIndex + step;
+        if (next < 0 || next >= testQuestions.length) return;
+        testIndex = next;
+        showTestQuestion();
+    }
+
+    function endTest() {
+        saveTestAnswer();
+        if (!confirm("End this test and grade all questions? Unanswered names count as incorrect.")) return;
+        document.getElementById("testActive").hidden = true;
+        document.getElementById("testResults").hidden = false;
+        let commonCorrect = 0, scientificCorrect = 0, attempted = 0;
+        const review = document.getElementById("testReview");
+        review.replaceChildren();
+        testQuestions.forEach((animal, i) => {
+            const answer = testAnswers[i];
+            const c = matchesAnswer(answer.common, animal.commonName);
+            const s = matchesAnswer(answer.scientific, animal.scientificName, true);
+            commonCorrect += Number(c);
+            scientificCorrect += Number(s);
+            attempted += Number(Boolean(answer.common.trim())) + Number(Boolean(answer.scientific.trim()));
+            const item = document.createElement("div");
+            item.className = "result-item";
+            const heading = document.createElement("strong");
+            heading.textContent = `Question ${i+1}: ${animal.commonName} (${animal.scientificName})`;
+            item.appendChild(heading);
+            for (const [label, value, correct] of [["Common", answer.common, c], ["Scientific", answer.scientific, s]]) {
+                const line = document.createElement("p");
+                line.className = correct ? "correct" : "incorrect";
+                line.textContent = `${label}: ${value.trim() || "[blank]"} — ${correct ? "Correct" : "Incorrect"}`;
+                item.appendChild(line);
+            }
+            review.appendChild(item);
+        });
+        const earned = commonCorrect + scientificCorrect;
+        const total = testQuestions.length * 2;
+        const summary = document.getElementById("testSummary");
+        summary.replaceChildren();
+        for (const line of [
+            `FINAL GRADE: ${earned}/${total} (${(earned / total * 100).toFixed(1)}%)`,
+            `COMMON NAMES: ${commonCorrect}/${testQuestions.length}`,
+            `SCIENTIFIC NAMES: ${scientificCorrect}/${testQuestions.length}`,
+            `ANSWERED NAME FIELDS: ${attempted}/${total}`,
+            `ACCURACY (ANSWERED ONLY): ${attempted ? (earned/attempted*100).toFixed(1) + "%" : "N/A"}`
+        ]) {
+            const p = document.createElement("p"); p.textContent = line; summary.appendChild(p);
+        }
+    }
+
+    function resetTest() {
+        testQuestions = [];
+        testAnswers.length = 0;
+        document.getElementById("testActive").hidden = true;
+        document.getElementById("testResults").hidden = true;
+        document.getElementById("testSetup").hidden = false;
+        setFlashcardsVisible(true);
+        displayAnimal();
     }
 
     loadSpecies();
