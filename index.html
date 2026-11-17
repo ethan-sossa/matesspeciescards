@@ -266,6 +266,12 @@
                 disabled>
             SHUFFLE UNMEMORIZED
         </button>
+        <button class="secondary"
+            id="shuffleMemorizedButton"
+            onclick="shuffleMemorized()"
+            disabled>
+        SHUFFLE MEMORIZED
+        </button>
     </div>
 
     <div class="save-controls">
@@ -357,6 +363,8 @@
     const scientificMemorized = document.getElementById("scientificMemorized");
     const shuffleUnmemorizedButton =
         document.getElementById("shuffleUnmemorizedButton");
+    const shuffleMemorizedButton =
+        document.getElementById("shuffleMemorizedButton");
         
 
     async function loadSpecies() {
@@ -406,6 +414,7 @@
         commonMemorized.disabled = !enabled;
         scientificMemorized.disabled = !enabled;
         shuffleUnmemorizedButton.disabled = !enabled;
+        shuffleMemorizedButton.disabled = !enabled;
     }
 
     function displayAnimal() {
@@ -512,6 +521,25 @@
             return;
         }
 
+        shuffleList(animals);
+
+        currentIndex = 0;
+        displayAnimal();
+    }
+
+    function shuffleMemorized() {
+        const memorizedAnimals = allAnimals.filter(animal => {
+            const progress = memorization[animal.scientificName];
+
+            return progress?.common && progress?.scientific;
+        });
+
+        if (memorizedAnimals.length === 0) {
+            alert("You haven't fully memorized any species yet!");
+            return;
+        }
+
+        animals = memorizedAnimals;
         shuffleList(animals);
 
         currentIndex = 0;
